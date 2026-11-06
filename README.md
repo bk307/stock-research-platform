@@ -1,44 +1,37 @@
-# Stock Research MVP — Phase 1
+# Stock Research MVP V0.3
 
-A **local, manually run**, end-of-day technical confluence prototype. It does **not** execute trades, produce AI-generated research, or provide real-time alerts.
+Experimental Streamlit screening app. **Not validated trading advice.**
 
-## Run
+## What's new
 
-1. Install Python 3.11 or newer.
-2. Open a terminal in this folder.
-3. Create an environment: `python -m venv .venv`
-4. Activate it: Windows `.venv\Scripts\activate`; macOS/Linux `source .venv/bin/activate`.
-5. Install dependencies: `pip install -r requirements.txt`
-6. Start: `streamlit run app.py`
-7. Open the local URL printed by Streamlit, usually `http://localhost:8501`.
+- **Confirmed EOD (default):** excludes the current New York calendar day's daily candle, even after 4 p.m. This deliberately delays same-evening confirmation to avoid uncertain provider finalization.
+- **Intraday Preview:** fetches available 30-minute regular-session bars for the current NY date, aggregates a provisional OHLCV candle, and recomputes technical evidence against the confirmed EOD baseline. Shows score delta, data status, and last bar timestamp. Does not replace the baseline.
+- If intraday bars are unavailable (weekend, holiday, outside data availability, provider failure), the app displays an explicit **EOD-only fallback**. If the benchmark intraday data is unavailable, relative strength is marked unavailable rather than compared against mismatched dates.
+- Results persist while switching tickers.
 
-## What works
+## GitHub / Streamlit update
 
-- Manually screen up to 30 tickers against SPY (or another benchmark).
-- Calculate SMA20/50/200, RSI14, MACD histogram, OBV, MFI14, ATR14, and relative strength.
-- Rank bullish and bearish candidates using five broad evidence categories.
-- Show readiness as Emerging / Developing / Confirmed / Extended / No setup.
-- Inspect category-level evidence and warnings; errors are shown, not hidden.
+Replace `app.py`, `engine.py`, `requirements.txt`, and `README.md` at the **root** of your existing GitHub repository; **add** `data_modes.py` at the root. Commit. Streamlit should redeploy; if it remains on an old version, use the Streamlit **My apps** management menu to reboot. Entry file remains `app.py`.
 
-## Critical limitations
+## Limitations
 
-- Uses `yfinance` as a **prototype-only** data source; availability, adjustments, licensing and reliability must be evaluated before production use. No assumption of commercial redistribution rights.
-- Scores and thresholds are **heuristics, not validated**. The five categories are not statistically independent, and no predictive edge is claimed.
-- Price data are auto-adjusted; OHLC and volume can differ from your chart provider.
-- Does **not** check earnings dates, SEC filings, fundamentals, sector regime, option spreads, position sizing, stop placement, taxes, or corporate actions beyond provider adjustments.
-- Data are downloaded on demand and cached for one hour; this is **not** scheduled monitoring.
-- No point-in-time constituent universe, survivorship-safe backtesting, or transaction-cost model.
-- No automated orders, alerts, AI-generated claims, or personalized recommendations.
+- This is **not a live-quote feed**. Yahoo/yfinance intraday data can be delayed, missing, revised, or restricted. Check provider usage rights before broader or commercial use.
+- Preview is for current New York date only; on weekends/holidays it falls back to confirmed EOD.
+- **Time-of-day volume normalization, complete 30-minute-bar verification, exchange-calendar holiday handling, and data-provider finalization checks are not yet implemented.** Intraday MFI/OBV can be skewed by partial-session volume. Preview is *not* a confirmed breakout or entry signal.
+- Adjusted historical OHLCV may differ from TradingView's data source and adjustment settings. Validate indicator values on the same completed candle.
+- Heuristic score weights and readiness thresholds are experimental, and there are no automated earnings, event, options, valuation, or portfolio checks.
+- Do not store brokerage credentials, API keys, or sensitive holdings in a public test deployment.
 
-## Planned build order
+## Local optional run
 
-1. Verify indicator parity against TradingView and add tests, data freshness and quality gates.
-2. Formalize strategy-specific scoring, risk/reward and event exclusions; backtest without look-ahead.
-3. Add fundamentals and two distinct long-term screens: Quality at a Discount; Deep Value / Turnaround.
-4. Add source-grounded AI research briefs and a skeptical second-opinion checklist.
-5. Add holdings, transactions, thesis history, closed positions and re-entry watchlist.
-6. Add options research, with chain liquidity and payoff/risk analysis.
+```bash
+pip install -r requirements.txt
+streamlit run app.py
+```
 
-## Design principle
+## Smoke test
 
-The software gathers and calculates evidence. The investor makes decisions. Missing or contradictory evidence must remain visible.
+1. Select **Confirmed EOD**, enter `AAPL,MSFT,NVDA`, benchmark `SPY`, run Bullish Swing. Confirm the date is strictly before today's New York date.
+2. Change candidate dropdown; table remains visible.
+3. Switch to **Intraday Preview** and rerun. During a trading session with available intraday data, verify the provisional label, last bar time, EOD baseline and delta. Otherwise verify the explicit fallback.
+4. Run Bearish Swing. Compare RSI/MFI and other indicator values on the same confirmed daily candle in TradingView.
