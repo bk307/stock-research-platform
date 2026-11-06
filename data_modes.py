@@ -88,3 +88,19 @@ def preview_frame(confirmed, aggregate, now=None):
     today = pd.Timestamp(ny_now(now).date())
     row = pd.DataFrame([{key: aggregate[key] for key in OHLCV}], index=[today])
     return pd.concat([d, row])
+
+
+def preview_quality(aggregate, now=None, stale_minutes=90):
+    """Describe intraday source freshness; never call a bar complete without proof."""
+    if aggregate is None:
+        return {'status': 'unavailable', 'age_minutes': None, 'message': 'No current-session intraday bars.'}
+    current = pd.Timestamp(ny_now(now))
+    last = pd.Timestamp(aggregate['last_bar_at'])
+    age = max(0, (current - last).total_seconds() / 60)
+    if age > stale_minutes:
+        status = 'stale'
+        msg = f'Latest 30-minute bar began {age:.0f} minutes ago. Preview is stale.'
+    else:
+        status = 'provisional'
+        msg = f'Latest 30-minute bar began {age:.0f} minutes ago. Completion is not verified.'
+    return {'status': status, 'age_minutes': round(age), 'message': msg}

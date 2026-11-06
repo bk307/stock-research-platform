@@ -1,37 +1,44 @@
-# Stock Research MVP V0.3
+# Stock Research MVP V0.4 — Opportunity Discovery
 
-Experimental Streamlit screening app. **Not validated trading advice.**
+This is an experimental, browser-deployable Streamlit stock research dashboard. It is **not** a validated trading strategy, real-time feed, investment recommendation, or comprehensive market scanner.
 
-## What's new
+## What changed since V0.3
 
-- **Confirmed EOD (default):** excludes the current New York calendar day's daily candle, even after 4 p.m. This deliberately delays same-evening confirmation to avoid uncertain provider finalization.
-- **Intraday Preview:** fetches available 30-minute regular-session bars for the current NY date, aggregates a provisional OHLCV candle, and recomputes technical evidence against the confirmed EOD baseline. Shows score delta, data status, and last bar timestamp. Does not replace the baseline.
-- If intraday bars are unavailable (weekend, holiday, outside data availability, provider failure), the app displays an explicit **EOD-only fallback**. If the benchmark intraday data is unavailable, relative strength is marked unavailable rather than compared against mismatched dates.
-- Results persist while switching tickers.
+- Built-in **illustrative 50-ticker starter universe** (not a liquidity-qualified or exhaustive U.S. universe), plus custom ticker entry.
+- Up to 50 tickers per manual run; default 15 to reduce provider throttling. Large runs may be slow or fail under free-data rate limits.
+- Five-session **confirmed EOD score change** and improving/unchanged/deteriorating status, calculated with historical date-cut benchmark data. This is a simple change metric, not an efficacy claim.
+- Basic data-quality flags for stale EOD observations, zero volume, missing data, and unavailable benchmark.
+- Intraday freshness warning; stale/unavailable previews fall back to confirmed EOD.
+- Downloadable **CSV screening snapshot** including timestamp, mode, benchmark, strategy, and ticker results.
+- Two screenshots of V0.3 validation saved under `validation_screenshots/` in the ZIP. They are historical test records, not live results.
 
-## GitHub / Streamlit update
+## Deploy / upgrade from V0.3
 
-Replace `app.py`, `engine.py`, `requirements.txt`, and `README.md` at the **root** of your existing GitHub repository; **add** `data_modes.py` at the root. Commit. Streamlit should redeploy; if it remains on an old version, use the Streamlit **My apps** management menu to reboot. Entry file remains `app.py`.
+1. Download and extract the ZIP.
+2. In your existing GitHub `stock-research-platform` repository, replace `app.py`, `engine.py`, `data_modes.py`, `requirements.txt`, and `README.md` and **add `universe.py`**. Keep these files at repository root.
+3. Commit the changes. Streamlit Community Cloud should redeploy; if not, use its app-management menu to reboot.
+4. Select **Custom tickers** and screen `AAPL,MSFT,NVDA` first; then test **Starter universe** with 5–10 tickers.
+5. Compare confirmed EOD with Intraday Preview. Export CSV and save it locally for history.
 
-## Limitations
+No Python installation is needed for this GitHub/Streamlit workflow.
 
-- This is **not a live-quote feed**. Yahoo/yfinance intraday data can be delayed, missing, revised, or restricted. Check provider usage rights before broader or commercial use.
-- Preview is for current New York date only; on weekends/holidays it falls back to confirmed EOD.
-- **Time-of-day volume normalization, complete 30-minute-bar verification, exchange-calendar holiday handling, and data-provider finalization checks are not yet implemented.** Intraday MFI/OBV can be skewed by partial-session volume. Preview is *not* a confirmed breakout or entry signal.
-- Adjusted historical OHLCV may differ from TradingView's data source and adjustment settings. Validate indicator values on the same completed candle.
-- Heuristic score weights and readiness thresholds are experimental, and there are no automated earnings, event, options, valuation, or portfolio checks.
-- Do not store brokerage credentials, API keys, or sensitive holdings in a public test deployment.
+## Important constraints
 
-## Local optional run
+- Yahoo Finance via `yfinance` is used for prototype research only; data can be delayed, stale, incomplete, revised, or rate-limited. Confirm data rights and licensing before scaling or redistributing.
+- Confirmed EOD deliberately excludes the current New York date, even after close. Holidays and special sessions are not verified against an exchange calendar.
+- Intraday preview aggregates available 30-minute bars. The latest bar may be incomplete. A 90-minute freshness threshold is heuristic and is not a real-time guarantee.
+- Screening results are held only in Streamlit session state. **CSV exports are manual; they do not automatically persist across app restarts.** Use a durable database in a future release for history and automated monitoring.
+- No automatic earnings calendar, fundamentals, valuation, options, event risk, sector mapping, or position sizing.
+- Starter universe membership is curated, static, and **not validated for current liquidity**. It is not the whole U.S. stock market.
+- Five-session change is calculated on completed EOD sessions. Intraday and EOD rankings should not be treated as interchangeable.
+- Do not enter private holdings, brokerage credentials, or secrets into a public prototype.
 
-```bash
-pip install -r requirements.txt
-streamlit run app.py
-```
+## Package files
 
-## Smoke test
-
-1. Select **Confirmed EOD**, enter `AAPL,MSFT,NVDA`, benchmark `SPY`, run Bullish Swing. Confirm the date is strictly before today's New York date.
-2. Change candidate dropdown; table remains visible.
-3. Switch to **Intraday Preview** and rerun. During a trading session with available intraday data, verify the provisional label, last bar time, EOD baseline and delta. Otherwise verify the explicit fallback.
-4. Run Bearish Swing. Compare RSI/MFI and other indicator values on the same confirmed daily candle in TradingView.
+- `app.py` — Streamlit dashboard
+- `engine.py` — experimental technical scoring
+- `data_modes.py` — confirmed EOD and intraday preview construction
+- `universe.py` — starter universe
+- `requirements.txt` — dependencies
+- `README.md` — this file
+- `validation_screenshots/` — archived V0.3 EOD and intraday screenshots
