@@ -35,3 +35,14 @@ def merge_history(existing: pd.DataFrame | None, new: pd.DataFrame) -> pd.DataFr
     keys = ['Screen timestamp UTC', 'Strategy', 'Research mode', 'Ticker']
     return (combined.drop_duplicates(subset=keys, keep='last')
             .sort_values(keys).reset_index(drop=True))
+
+
+def export_excel_safe(df: pd.DataFrame) -> bytes:
+    """Export an analysis-friendly CSV without date-like confluence strings."""
+    out = df.copy()
+    if 'Confluence' in out.columns:
+        parts = out['Confluence'].astype(str).str.extract(r'^(\d+)/(\d+)$')
+        out['Supporting Categories'] = pd.to_numeric(parts[0], errors='coerce')
+        out['Total Categories'] = pd.to_numeric(parts[1], errors='coerce')
+        out = out.drop(columns=['Confluence'])
+    return out.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig')

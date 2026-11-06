@@ -1,4 +1,4 @@
-"""Stock Research MVP V0.5 — ranked discovery, evidence changes and portable history."""
+"""Stock Research MVP V0.6 — ranked discovery, evidence changes and portable history."""
 from datetime import datetime, timezone
 import pandas as pd
 import streamlit as st
@@ -6,11 +6,12 @@ from engine import score, MIN_BARS
 from data_modes import confirmed_daily, aggregate_today_intraday, preview_frame, preview_quality, ny_now
 from universe import STARTER
 from research_quality import category_changes, intraday_assessment, eod_assessment, priority_label, PRIORITY_ORDER
-from history import import_history, merge_history
+from history import import_history, merge_history, export_excel_safe
+from cloud_history import CloudHistory, cloud_configured, cloud_error
 
-st.set_page_config(page_title='Stock Research MVP V0.5', layout='wide')
+st.set_page_config(page_title='Stock Research MVP V0.6', layout='wide')
 st.title('Stock Research MVP — Opportunity Discovery')
-st.caption('V0.5 · Experimental technical research · Not a recommendation or trading signal')
+st.caption('V0.6 · Experimental technical research · Not a recommendation or trading signal')
 st.warning('No automated earnings/event checks, fundamentals, options pricing, liquidity qualification, or execution-risk assessment. Scores are unvalidated.')
 
 @st.cache_data(ttl=1800, show_spinner=False)
@@ -60,10 +61,45 @@ def quality_checks(eod, now):
     return issues
 
 
-if 'screen_v05' not in st.session_state:
-    st.session_state.screen_v05 = None
-if 'history_v05' not in st.session_state:
-    st.session_state.history_v05 = pd.DataFrame()
+# A public Community Cloud URL does not provide user-level authentication.
+# Require a server-side app password before any screening or database operations.
+app_password = st.secrets.get('APP_PASSWORD', '')
+if not app_password:
+    st.error('Access is not configured. Add APP_PASSWORD in Streamlit app settings → Secrets before using this deployment.')
+    st.stop()
+import hmac
+if not st.session_state.get('authenticated_v06', False):
+    with st.form('login'):
+        supplied = st.text_input('Research dashboard access password', type='password')
+        login = st.form_submit_button('Unlock dashboard')
+    if login:
+        if hmac.compare_digest(str(supplied), str(app_password)):
+            st.session_state.authenticated_v06 = True
+            st.rerun()
+        else:
+            st.error('Incorrect password.')
+    st.stop()
+
+cloud = CloudHistory.from_secrets(st.secrets) if cloud_configured(st.secrets) else None
+with st.sidebar:
+    st.caption('History storage: ' + ('Supabase connected' if cloud else 'Local session / CSV only'))
+    if st.button('Lock dashboard'):
+        st.session_state.authenticated_v06 = False
+        st.session_state.pop('screen_v06', None)
+        st.session_state.pop('history_v06', None)
+        st.rerun()
+
+if 'screen_v06' not in st.session_state:
+    st.session_state.screen_v06 = None
+if 'history_v06' not in st.session_state:
+    st.session_state.history_v06 = pd.DataFrame()
+
+if cloud and not st.session_state.get('cloud_loaded_v06', False):
+    try:
+        st.session_state.history_v06 = merge_history(st.session_state.history_v06, cloud.load())
+        st.session_state.cloud_loaded_v06 = True
+    except Exception as exc:
+        st.error(f'Cloud history could not be loaded: {cloud_error(exc)}. Local CSV remains available; no automatic cloud write will occur until resolved.')
 
 with st.sidebar:
     st.header('Screen configuration')
@@ -76,16 +112,18 @@ with st.sidebar:
         research_mode = st.radio('Research mode', ['Confirmed EOD', 'Intraday Preview'])
         run = st.form_submit_button('Run research screen', type='primary')
     with st.expander('Restore prior research history (CSV)'):
-        uploaded = st.file_uploader('Previously downloaded V0.5 history CSV', type='csv', key='history_upload_v05')
+        uploaded = st.file_uploader('Previously downloaded V0.6 history CSV', type='csv', key='history_upload_v06')
         if st.button('Import history', disabled=uploaded is None):
             try:
                 incoming = import_history(uploaded.getvalue())
-                st.session_state.history_v05 = merge_history(st.session_state.history_v05, incoming)
-                st.success(f'Imported history; {len(st.session_state.history_v05)} unique records available this session.')
+                st.session_state.history_v06 = merge_history(st.session_state.history_v06, incoming)
+                if cloud:
+                    cloud.upsert(st.session_state.history_v06)
+                st.success(f'Imported history; {len(st.session_state.history_v06)} unique records available.' + (' Saved to cloud.' if cloud else ' Export CSV to preserve.'))
             except Exception as exc:
                 st.error(f'Import failed: {exc}')
     st.caption('Starter universe is illustrative, not a full market scan or liquidity-screened list. Yahoo data may be delayed, revised, or rate-limited.')
-    if st.session_state.screen_v05:
+    if st.session_state.screen_v06:
         st.caption('Results remain available while you change the candidate dropdown. Run again to refresh.')
 
 if run:
@@ -183,15 +221,30 @@ if run:
                     errors.append(f'{symbol}: {exc}')
                 progress.progress((i+1)/len(symbols))
             progress.empty()
-        st.session_state.screen_v05 = {
+        st.session_state.screen_v06 = {
             'rows': rows, 'details': details, 'errors': errors,
             'direction': direction_label, 'benchmark': benchmark_symbol,
             'mode': research_mode, 'universe': universe_mode,
             'run_at': now.strftime('%Y-%m-%d %H:%M %Z'),
             'export_at_utc': datetime.now(timezone.utc).isoformat(timespec='seconds')}
-        st.session_state.pop('candidate_v05', None)
+        st.session_state.pop('candidate_v06', None)
+        if rows:
+            snapshot = pd.DataFrame(rows)
+            snapshot.insert(0, 'Screen timestamp UTC', st.session_state.screen_v06['export_at_utc'])
+            snapshot.insert(1, 'Research mode', research_mode)
+            snapshot.insert(2, 'Strategy', direction_label)
+            snapshot.insert(3, 'Benchmark', benchmark_symbol)
+            st.session_state.history_v06 = merge_history(st.session_state.history_v06, snapshot)
+            if cloud:
+                try:
+                    cloud.upsert(snapshot)
+                    st.session_state.last_cloud_save_v06 = 'Saved latest screen to cloud.'
+                except Exception as exc:
+                    st.session_state.last_cloud_save_v06 = f'Cloud save FAILED: {cloud_error(exc)}. Download CSV to preserve results.'
+            else:
+                st.session_state.last_cloud_save_v06 = 'Session-only history; download CSV to preserve.'
 
-screen = st.session_state.screen_v05
+screen = st.session_state.screen_v06
 if screen is None:
     st.info('Choose a universe and research mode, then click **Run research screen**.')
 else:
@@ -209,7 +262,10 @@ else:
         table['_change'] = pd.to_numeric(table['5-Session EOD Δ'], errors='coerce').fillna(-999)
         table = table.sort_values(['_priority', 'Contradictions', '_change', 'Score', 'Ticker'],
                                   ascending=[True, True, False, False, True]).drop(columns=['_priority', '_change'])
-        st.dataframe(table, use_container_width=True, hide_index=True)
+        compact = ['Ticker','Priority','Data confidence','Evidence changes','Score','Confluence','Contradictions','Readiness','5-Session EOD Δ','Data date']
+        st.dataframe(table[compact], use_container_width=True, hide_index=True)
+        with st.expander('Full screening metrics (RSI, MFI, price, data status)'):
+            st.dataframe(table, use_container_width=True, hide_index=True)
         st.caption('Priority is a research ordering aid, NOT a trading recommendation. Provisional signals are capped at Provisional confidence; stale previews fall back to EOD. Five-session Δ compares confirmed EOD scores, not returns.')
         export = table.copy()
         export.insert(0, 'Screen timestamp UTC', screen['export_at_utc'])
@@ -217,21 +273,26 @@ else:
         export.insert(2, 'Strategy', screen['direction'])
         export.insert(3, 'Benchmark', screen['benchmark'])
         # Add to session-only history; durable storage requires exporting the history file.
-        st.session_state.history_v05 = merge_history(st.session_state.history_v05, export)
         st.download_button('Download current screening snapshot (CSV)',
                            export.to_csv(index=False).encode('utf-8'),
                            file_name=f"stock_research_{screen['export_at_utc'][:10]}_{screen['mode'].replace(' ','_')}.csv",
                            mime='text/csv')
-        history_df = st.session_state.history_v05
+        history_df = st.session_state.history_v06
         st.download_button('Download cumulative research history (CSV)',
                            history_df.to_csv(index=False).encode('utf-8'),
-                           file_name='stock_research_history_v05.csv', mime='text/csv')
-        st.caption(f'{len(history_df)} historical rows retained in this browser session. Download cumulative history to preserve it; restore via sidebar after app restarts. Not a cloud database.')
-        chosen = st.selectbox('Inspect candidate', table['Ticker'].tolist(), key='candidate_v05')
+                           file_name='stock_research_history_v06.csv', mime='text/csv')
+        st.caption(f'{len(history_df)} historical rows available. ' + st.session_state.get('last_cloud_save_v06', 'Cloud sync active.' if cloud else 'Session only: export CSV to preserve.'))
+        st.download_button('Download Excel-safe research history (CSV)', export_excel_safe(history_df), file_name='stock_research_history_excel_safe_v06.csv', mime='text/csv')
+        chosen = st.selectbox('Inspect candidate', table['Ticker'].tolist(), key='candidate_v06')
         item = screen['details'][chosen]
         result, baseline, prior = item['result'], item['baseline'], item['prior']
         st.subheader(f"{chosen} — {result['readiness']}")
         st.write(f"**Research priority:** {item['priority']} · **Data confidence:** {item['data_quality']['label']}")
+        supportive = [name.replace('_',' ').title() for name, s in result['statuses'].items() if s == 'supportive']
+        opposing = [name.replace('_',' ').title() for name, s in result['statuses'].items() if s == 'contradictory']
+        st.write('**Supporting evidence:** ' + (', '.join(supportive) if supportive else 'None confirmed') + '. **Contradictory evidence:** ' + (', '.join(opposing) if opposing else 'None identified') + '.')
+        if item['data_quality']['label'] in ('Stale','Unavailable','Incomplete','Review'):
+            st.warning('Current data confidence is limited. The displayed technical score may reflect an older EOD baseline; do not interpret it as a fresh intraday assessment.')
         st.caption(f"Data {result['data_date']} · Score {result['score']}/100 · Support {result['aligned']}/5 · Contradictions {result['contradictions']}")
         if prior:
             st.write(f"**Five-session confirmed EOD change:** {baseline['score']-prior['score']:+d} points ({prior['score']} → {baseline['score']}).")
