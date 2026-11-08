@@ -35,9 +35,13 @@ def cloud_error(exc):
 class CloudHistory:
     def __init__(self, url, key):
         self.url = str(url).rstrip('/') + '/rest/v1/research_snapshots'
-        self.headers = {'apikey': str(key), 'Authorization': 'Bearer ' + str(key),
+        self.headers = {'apikey': str(key),
                         'Content-Type': 'application/json',
                         'Prefer': 'resolution=merge-duplicates,return=minimal'}
+        # Supabase sb_secret_ keys are API keys, not JWT bearer tokens.
+        # Legacy service_role JWT keys may also be used as Bearer tokens.
+        if not str(key).startswith('sb_secret_'):
+            self.headers['Authorization'] = 'Bearer ' + str(key)
 
     @classmethod
     def from_secrets(cls, secrets):
