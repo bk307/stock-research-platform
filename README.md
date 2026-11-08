@@ -1,38 +1,27 @@
-# Stock Research MVP V0.7
+# Stock Research MVP V0.8 — Historical Opportunity Tracking
 
-## What's changed
-- Navy/charcoal Streamlit theme with copper accent in `.streamlit/config.toml`.
-- Supabase REST adapter matches the **existing** `public.research_snapshots` table created with the earlier V0.7 SQL. No additional SQL migration required.
-- Keeps V0.6 screens, CSV exports, evidence explanations and password gate.
-- Adds cloud-connection health handling; CSV export remains the fallback if Supabase is unavailable.
+## What's new
+- Historical opportunity tracking section below the latest screening/candidate details.
+- Comparison table for each ticker's latest and preceding **distinct Confirmed EOD data dates**: score, change, evidence count, readiness, and contradictions.
+- Per-ticker historical score chart and observation table.
+- Separate strategy and benchmark selection. Intraday Preview snapshots are excluded from historical EOD comparisons.
+- Keeps V0.7 navy/charcoal/copper theme, password gate, cloud persistence, CSV backup, and research screen.
+- Includes the V0.7 Supabase `sb_secret_` API-header fix.
 
-## Deployment
-1. Keep your working V0.6 deployment available until V0.7 is verified.
-2. Upload/replace all `.py` files, `requirements.txt`, and `README.md` in the existing GitHub repository.
-3. Create a **`.streamlit` folder** at the repository root and upload `config.toml` inside it. GitHub web upload can create the folder by naming the new file `.streamlit/config.toml`.
-4. In Streamlit Community Cloud > My apps > your app > Settings > Secrets, preserve your existing `APP_PASSWORD` and add the following **with your actual values entered there only**:
+## Deploy
+1. Download and unzip this package.
+2. In the existing GitHub `stock-research-platform` repository, replace the Python files and `requirements.txt`, update README, and retain `.streamlit/config.toml` at repository root. Add the **new** `opportunity_history.py` file at repository root next to `app.py`.
+3. Commit changes; wait for Streamlit Community Cloud to redeploy. If necessary reboot via Manage app.
+4. Keep your existing Streamlit Secrets (`APP_PASSWORD`, `SUPABASE_URL` (base URL only), `SUPABASE_SERVICE_ROLE_KEY`). Never commit secrets to GitHub.
+5. Unlock the dashboard and scroll beneath candidate details to **Historical opportunity tracking — Confirmed EOD**. No SQL migration is required.
 
-```toml
-APP_PASSWORD = "your-existing-password"
-SUPABASE_URL = "https://your-project-ref.supabase.co"
-SUPABASE_SERVICE_ROLE_KEY = "your-server-side-secret-key"
-```
+## Validation
+- Verify that existing Supabase rows load without cloud error and history appears in the new section.
+- With only one distinct EOD date per ticker, expect `Insufficient history`, **not** a fabricated trend.
+- Rerun a screen on the same data date: it must not create a second EOD observation in the historical comparison. It may create another stored run snapshot.
+- After a subsequent completed trading session, compare two distinct data dates and verify score delta.
+- Verify Intraday Preview observations do not enter Confirmed EOD trends.
+- Confirm cloud storage writes and check rows in Supabase. Export a CSV backup.
 
-A newer Supabase `sb_secret_...` key may be used if it has the appropriate database privileges. The legacy `service_role` key is also supported. Never commit credentials or a local `secrets.toml` file to GitHub. The secret key bypasses Row Level Security; keep it exclusively server-side. This simple app password is not full multi-user authentication.
-
-5. Save Secrets and let Streamlit restart; if necessary reboot from My apps.
-6. Unlock the app, run a small **Confirmed EOD** screen (e.g. AAPL, MSFT, NVDA), and verify that the history caption says `Saved latest screen to cloud.`
-7. In Supabase > Table Editor > `research_snapshots`, verify three rows with ticker, score, strategy, timestamp and `snapshot_id`.
-8. Reboot the Streamlit app and unlock it again. The same history should load automatically. Check the cumulative CSV.
-
-## Troubleshooting
-- `HTTP 401` or `HTTP 403`: check the project URL and secret key; do not post keys or full logs containing secrets.
-- `HTTP 400`: table schema mismatch or invalid field. Verify the table uses the SQL from the earlier V0.7 instructions and the deployed `cloud_history.py` is the new version.
-- `HTTP 404`: project URL or table path incorrect.
-- If cloud sync fails, download cumulative CSV before closing the session. Don't assume data was saved remotely.
-- Public GitHub repository and a password form are **not** sufficient security for real brokerage credentials or sensitive holdings. Use this prototype only with non-sensitive research data.
-
-## Limitations
-- Historical research scores are experimental, not validated forecasts.
-- Supabase connection has not been exercised against your live project by the author; test the first write and restart explicitly.
-- The dark theme uses native Streamlit styling; not every third-party table/chart element will exactly match the palette.
+## Important limitations
+The research scores and labels are unvalidated heuristics, not recommendations or forecasts. A change in score is not a return or a predictive performance claim. Yahoo Finance data may be delayed or revised. This version does not implement event/earnings filters, options liquidity/risk checks, fundamentals, or automated trades. Streamlit password protection is a shared application gate, not a multi-user identity system. Supabase secret keys must remain in Streamlit server-side Secrets.

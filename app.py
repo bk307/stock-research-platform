@@ -1,4 +1,4 @@
-"""Stock Research MVP V0.7 — ranked discovery, evidence changes and portable history."""
+"""Stock Research MVP V0.8 — ranked discovery, evidence changes and portable history."""
 from datetime import datetime, timezone
 import pandas as pd
 import streamlit as st
@@ -8,10 +8,11 @@ from universe import STARTER
 from research_quality import category_changes, intraday_assessment, eod_assessment, priority_label, PRIORITY_ORDER
 from history import import_history, merge_history, export_excel_safe
 from cloud_history import CloudHistory, cloud_configured, cloud_error
+from opportunity_history import prepare_history, summarize_history
 
-st.set_page_config(page_title='Stock Research MVP V0.7', layout='wide')
+st.set_page_config(page_title='Stock Research MVP V0.8', layout='wide')
 st.title('Stock Research MVP — Opportunity Discovery')
-st.caption('V0.7 · Experimental technical research · Not a recommendation or trading signal')
+st.caption('V0.8 · Experimental technical research · Not a recommendation or trading signal')
 st.warning('No automated earnings/event checks, fundamentals, options pricing, liquidity qualification, or execution-risk assessment. Scores are unvalidated.')
 
 @st.cache_data(ttl=1800, show_spinner=False)
@@ -325,3 +326,35 @@ else:
         with st.expander(f"{len(screen['errors'])} data warnings / exclusions"):
             for error in screen['errors']:
                 st.write('• ' + error)
+
+
+# V0.8: history is descriptive. Each data date counts once per ticker/strategy/benchmark.
+st.divider()
+st.subheader('Historical opportunity tracking — Confirmed EOD')
+st.caption('Cross-session comparisons use distinct completed-session data dates. Repeated screens on the same data date do not count as additional observations. Intraday Preview is excluded from these comparisons.')
+raw_history = st.session_state.history_v06
+if raw_history.empty:
+    st.info('No saved observations yet. Run a Confirmed EOD screen and return after a later completed market session to compare changes.')
+else:
+    available_strategies = sorted(raw_history['Strategy'].dropna().astype(str).unique()) if 'Strategy' in raw_history else []
+    if available_strategies:
+        h_strategy = st.selectbox('Historical strategy', available_strategies, key='historical_strategy_v08')
+        benchmarks = sorted(raw_history.loc[raw_history['Strategy'].eq(h_strategy), 'Benchmark'].dropna().astype(str).unique()) if 'Benchmark' in raw_history else []
+        h_benchmark = st.selectbox('Historical benchmark', benchmarks, key='historical_benchmark_v08') if benchmarks else None
+        eod_history = prepare_history(raw_history, strategy=h_strategy, benchmark=h_benchmark)
+        overview = summarize_history(eod_history)
+        if overview.empty:
+            st.info('No eligible Confirmed EOD history for this strategy and benchmark. Intraday Preview records are not used here.')
+        else:
+            st.caption(f'{len(eod_history)} distinct ticker/session observations across {len(overview)} tickers. Cloud history is loaded on app startup when configured and healthy.')
+            st.dataframe(overview.sort_values(['EOD observations', 'Ticker'], ascending=[False, True]), use_container_width=True, hide_index=True)
+            with st.expander('Inspect historical score trajectory', expanded=False):
+                ticker = st.selectbox('Historical ticker', sorted(overview['Ticker'].unique()), key='historical_ticker_v08')
+                series = eod_history[eod_history['Ticker'].eq(ticker)].sort_values('Data date')
+                st.line_chart(series.set_index('Data date')['Score'], y_label='Research score (0–100)')
+                cols = [c for c in ['Data date', 'Score', 'Confluence', 'Contradictions', 'Readiness', 'Priority', 'Data confidence', 'Evidence changes'] if c in series]
+                st.dataframe(series[cols], use_container_width=True, hide_index=True)
+                if len(series) < 2:
+                    st.info('Only one distinct EOD data date is available. A change direction cannot yet be determined.')
+            st.caption('Historical changes describe past score differences, not price returns, forecasts, statistically validated signals, or entry recommendations. Confirmed EOD values can be revised by the data provider.')
+
