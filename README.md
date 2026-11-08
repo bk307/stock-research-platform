@@ -1,57 +1,38 @@
-# Stock Research MVP V0.6 — Research History and Clarity
+# Stock Research MVP V0.7
 
-## Deploy
-Replace `app.py`, `engine.py`, `data_modes.py`, `universe.py`, `research_quality.py`, `history.py`, `requirements.txt`, and `README.md` in the existing GitHub repo. **Add `cloud_history.py`.** Commit; Streamlit will redeploy.
+## What's changed
+- Navy/charcoal Streamlit theme with copper accent in `.streamlit/config.toml`.
+- Supabase REST adapter matches the **existing** `public.research_snapshots` table created with the earlier V0.7 SQL. No additional SQL migration required.
+- Keeps V0.6 screens, CSV exports, evidence explanations and password gate.
+- Adds cloud-connection health handling; CSV export remains the fallback if Supabase is unavailable.
 
-## Required security configuration
-Your Streamlit Community Cloud app URL may be publicly reachable. Before using V0.6, go to **Streamlit Community Cloud → My apps → your app → Settings → Secrets** and add:
-
-```toml
-APP_PASSWORD = "CHOOSE_A_LONG_UNIQUE_PASSWORD"
-```
-
-Do not commit this password or any cloud key to GitHub. The app will refuse to run without a password. This is a basic shared password gate, **not full per-user authentication**. Anyone who knows the password shares access to the same cloud history. Do not enter brokerage credentials or sensitive personal financial information.
-
-## Optional persistent history (Supabase)
-Create a Supabase project (free-tier eligibility and limits may change). Open its SQL editor and run:
-
-```sql
-create table if not exists public.research_snapshots (
-  record_id text primary key,
-  run_at timestamptz not null,
-  ticker text not null,
-  payload jsonb not null
-);
-create index if not exists research_snapshots_run_at_idx
-  on public.research_snapshots (run_at);
-alter table public.research_snapshots enable row level security;
--- Do not create anonymous access policies.
-```
-
-Then add to **Streamlit app Settings → Secrets** (not GitHub):
+## Deployment
+1. Keep your working V0.6 deployment available until V0.7 is verified.
+2. Upload/replace all `.py` files, `requirements.txt`, and `README.md` in the existing GitHub repository.
+3. Create a **`.streamlit` folder** at the repository root and upload `config.toml` inside it. GitHub web upload can create the folder by naming the new file `.streamlit/config.toml`.
+4. In Streamlit Community Cloud > My apps > your app > Settings > Secrets, preserve your existing `APP_PASSWORD` and add the following **with your actual values entered there only**:
 
 ```toml
-APP_PASSWORD = "CHOOSE_A_LONG_UNIQUE_PASSWORD"
-SUPABASE_URL = "https://YOUR_PROJECT.supabase.co"
-SUPABASE_SERVICE_ROLE_KEY = "YOUR_SECRET_SERVER_SIDE_KEY"
+APP_PASSWORD = "your-existing-password"
+SUPABASE_URL = "https://your-project-ref.supabase.co"
+SUPABASE_SERVICE_ROLE_KEY = "your-server-side-secret-key"
 ```
 
-**Security:** The service-role key bypasses row-level security. Keep it exclusively in server-side Streamlit Secrets. This prototype's shared password is not a substitute for proper authentication, access controls, auditing, and production security. A public Streamlit app with a shared password is appropriate only for non-sensitive prototype research.
+A newer Supabase `sb_secret_...` key may be used if it has the appropriate database privileges. The legacy `service_role` key is also supported. Never commit credentials or a local `secrets.toml` file to GitHub. The secret key bypasses Row Level Security; keep it exclusively server-side. This simple app password is not full multi-user authentication.
 
-When cloud configuration is present, the app loads history on first unlock and writes each completed screen to Supabase. If a write fails, the app shows a failure message; export CSV as a backup. Without Supabase, session-only CSV workflows remain available.
+5. Save Secrets and let Streamlit restart; if necessary reboot from My apps.
+6. Unlock the app, run a small **Confirmed EOD** screen (e.g. AAPL, MSFT, NVDA), and verify that the history caption says `Saved latest screen to cloud.`
+7. In Supabase > Table Editor > `research_snapshots`, verify three rows with ticker, score, strategy, timestamp and `snapshot_id`.
+8. Reboot the Streamlit app and unlock it again. The same history should load automatically. Check the cumulative CSV.
 
-## V0.6 improvements
-- Compact discovery table and expandable detailed metrics.
-- Short supporting-versus-contradictory evidence summary.
-- Duplicate-resistant history snapshots (same run timestamp, mode, strategy, ticker).
-- Excel-safe CSV export splits `2/5` into numeric Supporting Categories and Total Categories.
-- Optional Supabase persistence; required shared-password gate.
+## Troubleshooting
+- `HTTP 401` or `HTTP 403`: check the project URL and secret key; do not post keys or full logs containing secrets.
+- `HTTP 400`: table schema mismatch or invalid field. Verify the table uses the SQL from the earlier V0.7 instructions and the deployed `cloud_history.py` is the new version.
+- `HTTP 404`: project URL or table path incorrect.
+- If cloud sync fails, download cumulative CSV before closing the session. Don't assume data was saved remotely.
+- Public GitHub repository and a password form are **not** sufficient security for real brokerage credentials or sensitive holdings. Use this prototype only with non-sensitive research data.
 
-## Validation
-1. Set APP_PASSWORD in Streamlit Secrets and unlock.
-2. Run AAPL,MSFT,NVDA in EOD and inspect details.
-3. Download Excel-safe CSV and check numeric confluence fields.
-4. If using Supabase, run a screen, reboot app, unlock, and verify history restored.
-5. Rerun same screen widget interactions and confirm no extra history rows are added.
-
-**Limitations:** Scores remain unvalidated. Data may be delayed; intraday previews are provisional and fall back to EOD when stale. No automated fundamental, earnings, options, or execution risk checks.
+## Limitations
+- Historical research scores are experimental, not validated forecasts.
+- Supabase connection has not been exercised against your live project by the author; test the first write and restart explicitly.
+- The dark theme uses native Streamlit styling; not every third-party table/chart element will exactly match the palette.

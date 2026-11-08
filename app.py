@@ -1,4 +1,4 @@
-"""Stock Research MVP V0.6 — ranked discovery, evidence changes and portable history."""
+"""Stock Research MVP V0.7 — ranked discovery, evidence changes and portable history."""
 from datetime import datetime, timezone
 import pandas as pd
 import streamlit as st
@@ -9,9 +9,9 @@ from research_quality import category_changes, intraday_assessment, eod_assessme
 from history import import_history, merge_history, export_excel_safe
 from cloud_history import CloudHistory, cloud_configured, cloud_error
 
-st.set_page_config(page_title='Stock Research MVP V0.6', layout='wide')
+st.set_page_config(page_title='Stock Research MVP V0.7', layout='wide')
 st.title('Stock Research MVP — Opportunity Discovery')
-st.caption('V0.6 · Experimental technical research · Not a recommendation or trading signal')
+st.caption('V0.7 · Experimental technical research · Not a recommendation or trading signal')
 st.warning('No automated earnings/event checks, fundamentals, options pricing, liquidity qualification, or execution-risk assessment. Scores are unvalidated.')
 
 @st.cache_data(ttl=1800, show_spinner=False)
@@ -82,7 +82,7 @@ if not st.session_state.get('authenticated_v06', False):
 
 cloud = CloudHistory.from_secrets(st.secrets) if cloud_configured(st.secrets) else None
 with st.sidebar:
-    st.caption('History storage: ' + ('Supabase connected' if cloud else 'Local session / CSV only'))
+    st.caption('History storage: ' + ('Supabase configured (verify saved records)' if cloud else 'Local session / CSV only'))
     if st.button('Lock dashboard'):
         st.session_state.authenticated_v06 = False
         st.session_state.pop('screen_v06', None)
@@ -98,7 +98,9 @@ if cloud and not st.session_state.get('cloud_loaded_v06', False):
     try:
         st.session_state.history_v06 = merge_history(st.session_state.history_v06, cloud.load())
         st.session_state.cloud_loaded_v06 = True
+        st.session_state.cloud_healthy_v07 = True
     except Exception as exc:
+        st.session_state.cloud_healthy_v07 = False
         st.error(f'Cloud history could not be loaded: {cloud_error(exc)}. Local CSV remains available; no automatic cloud write will occur until resolved.')
 
 with st.sidebar:
@@ -117,7 +119,7 @@ with st.sidebar:
             try:
                 incoming = import_history(uploaded.getvalue())
                 st.session_state.history_v06 = merge_history(st.session_state.history_v06, incoming)
-                if cloud:
+                if cloud and st.session_state.get('cloud_healthy_v07', False):
                     cloud.upsert(st.session_state.history_v06)
                 st.success(f'Imported history; {len(st.session_state.history_v06)} unique records available.' + (' Saved to cloud.' if cloud else ' Export CSV to preserve.'))
             except Exception as exc:
@@ -235,14 +237,14 @@ if run:
             snapshot.insert(2, 'Strategy', direction_label)
             snapshot.insert(3, 'Benchmark', benchmark_symbol)
             st.session_state.history_v06 = merge_history(st.session_state.history_v06, snapshot)
-            if cloud:
+            if cloud and st.session_state.get('cloud_healthy_v07', False):
                 try:
                     cloud.upsert(snapshot)
                     st.session_state.last_cloud_save_v06 = 'Saved latest screen to cloud.'
                 except Exception as exc:
                     st.session_state.last_cloud_save_v06 = f'Cloud save FAILED: {cloud_error(exc)}. Download CSV to preserve results.'
             else:
-                st.session_state.last_cloud_save_v06 = 'Session-only history; download CSV to preserve.'
+                st.session_state.last_cloud_save_v06 = 'Cloud not configured or unavailable; download CSV to preserve.'
 
 screen = st.session_state.screen_v06
 if screen is None:
@@ -272,7 +274,7 @@ else:
         export.insert(1, 'Research mode', screen['mode'])
         export.insert(2, 'Strategy', screen['direction'])
         export.insert(3, 'Benchmark', screen['benchmark'])
-        # Add to session-only history; durable storage requires exporting the history file.
+        # History is saved to Supabase only when a healthy cloud connection is available.
         st.download_button('Download current screening snapshot (CSV)',
                            export.to_csv(index=False).encode('utf-8'),
                            file_name=f"stock_research_{screen['export_at_utc'][:10]}_{screen['mode'].replace(' ','_')}.csv",
